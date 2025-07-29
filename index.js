@@ -1,5 +1,4 @@
 require('dotenv').config();
-const fs = require('fs');
 const express = require('express');
 const {
   Client,
@@ -22,11 +21,6 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID;
-const LAST_MESSAGE_PATH = './lastMessage.json';
-
-console.log('🔑 TOKEN:', TOKEN ? 'Loaded' : 'Missing');
-console.log('📢 CHANNEL_ID:', CHANNEL_ID);
-console.log('🛡️ REQUIRED_ROLE_ID:', REQUIRED_ROLE_ID);
 
 // グループとメンバー一覧
 const groupMembers = {
@@ -80,16 +74,12 @@ async function sendOrUpdateEmbed() {
     const channel = await client.channels.fetch(CHANNEL_ID);
     if (!channel) return console.log('❌ チャンネルが見つかりません');
 
-    // 前回メッセージの削除
-    if (fs.existsSync(LAST_MESSAGE_PATH)) {
-      const { messageId } = JSON.parse(fs.readFileSync(LAST_MESSAGE_PATH, 'utf-8'));
-      try {
-        const oldMsg = await channel.messages.fetch(messageId);
-        await oldMsg.delete();
-        console.log('🗑️ 古いEmbedを削除しました');
-      } catch (err) {
-        console.warn('⚠️ 旧メッセージの削除失敗:', err.message);
-      }
+    // Botが直近に送ったメッセージを削除
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const lastBotMsg = messages.find(msg => msg.author.id === client.user.id);
+    if (lastBotMsg) {
+      await lastBotMsg.delete();
+      console.log('🗑️ 古いEmbedを削除しました');
     }
 
     // 新しいEmbed送信
@@ -99,13 +89,11 @@ async function sendOrUpdateEmbed() {
       .setColor(0x00AEFF)
       .setImage('https://i.imgur.com/dpvNDs6.jpeg');
 
-    const sentMessage = await channel.send({
+    await channel.send({
       embeds: [embed],
       components: createGroupButtons(),
     });
 
-    // メッセージID保存
-    fs.writeFileSync(LAST_MESSAGE_PATH, JSON.stringify({ messageId: sentMessage.id }));
     console.log('✅ 新しいEmbedを送信しました');
   } catch (error) {
     console.error('❌ sendOrUpdateEmbedエラー:', error);
@@ -116,7 +104,7 @@ async function sendOrUpdateEmbed() {
 client.once('ready', () => {
   console.log(`🚀 ${client.user.tag} 起動完了`);
   sendOrUpdateEmbed();
-  setInterval(sendOrUpdateEmbed, 5 * 60 * 1000); // 5分ごと再送
+  setInterval(sendOrUpdateEmbed, 5 * 60 * 1000);
 });
 
 // インタラクション対応
@@ -182,9 +170,9 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Expressサーバー (UptimeRobot 用)
+// Expressサーバー（UptimeRobot用）
 const app = express();
 app.get('/', (_, res) => res.send('Bot is running!'));
-app.listen(3000, () => console.log('🌐 Expressサーバー起動完了 (ポート3000)'));
+app.listen(3000, () => console.log('🌐 Expressサーバー起動完了（ポート3000）'));
 
 client.login(TOKEN);
