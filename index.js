@@ -1,5 +1,5 @@
-console.log("TOKEN:", process.env.TOKEN);
 require('dotenv').config();
+console.log("TOKEN:", process.env.TOKEN);
 const express = require('express');
 const {
   Client,
