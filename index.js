@@ -1,5 +1,6 @@
 require('dotenv').config();
 console.log("TOKEN:", process.env.TOKEN);
+
 const express = require('express');
 const {
   Client,
@@ -25,7 +26,19 @@ const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID;
 
 const groupMembers = {
   "TWICE": ["Nayeon", "Jeongyeon", "Momo", "Sana", "Jihyo", "Mina", "Dahyun", "Chaeyoung", "Tzuyu"],
-  // ...省略、全て同じ
+  "ITZY": ["Yeji", "Lia", "Ryujin", "Chaeryeong", "Yuna"],
+  "NMIXK": ["Haewon", "Lily", "Sullyoon", "Jinni", "Bae", "Jiwoo", "Kyujin"],
+  "ILLIT": ["Yunah", "Minju", "Moka", "Wonhee", "Iroha"],
+  "KISS OF LIFE": ["Julie", "Natty", "Belle", "Haneul"],
+  "TRIPLE S": ["Yubin", "Kaede", "SeoYeon", "Hyerin"],
+  "FROMIS 9": ["Saerom", "Hayoung", "Gyuri", "Jiwon", "Jisun", "Seoyeon", "Chaeyoung", "Nagyung", "Jiheon"],
+  "LOONA": ["Heejin", "Hyunjin", "Haseul", "Yeojin", "Vivi", "Kim Lip", "Jinsoul", "Choerry", "Yves", "Chuu", "Go Won", "Olivia Hye"],
+  "H1KEY": ["Seoi", "Riina", "Hwiseo", "Yel"],
+  "STAYC": ["Sumin", "Sieun", "Isa", "Seeun", "Yoon", "J"],
+  "(G)I-DLE": ["Soyeon", "Minnie", "Miyeon", "Yuqi", "Shuhua"],
+  "XG": ["Jurin", "Chisa", "Cocona", "Hinata", "Juria", "Maya", "Harvey"],
+  "BLACKPINK": ["Jisoo", "Jennie", "Rosé", "Lisa"],
+  "KEPLER": ["Yujin", "Mashiro", "Xiaoting", "Chaehyun", "Dayeon", "Hikaru", "Bahiyyih", "Youngeun", "Yeseo"],
   "NIZIU": ["Mako", "Rio", "Maya", "Riku", "Ayaka", "Mayuka", "Rima", "Miihi", "Nina"]
 };
 
@@ -33,6 +46,8 @@ function createGroupButtons() {
   const rows = [];
   let currentRow = new ActionRowBuilder();
   let count = 0;
+  let total = 0;
+
   for (const group of Object.keys(groupMembers)) {
     if (count >= 5) {
       rows.push(currentRow);
@@ -46,24 +61,29 @@ function createGroupButtons() {
         .setStyle(ButtonStyle.Primary)
     );
     count++;
+    total++;
   }
+
   if (count > 0) rows.push(currentRow);
+  console.log(`🧩 ボタン数: ${total}, 行数: ${rows.length}`);
   return rows;
 }
-
-let lastMessage = null;
 
 async function sendOrUpdateEmbed() {
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
     if (!channel) return console.error('❌ チャンネルが見つかりません');
 
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const botMessages = messages.filter(msg => msg.author.id === client.user.id);
+    const lastMessage = botMessages.first();
+
     if (lastMessage) {
       try {
         await lastMessage.delete();
-        console.log('🗑️ 前のメッセージ削除完了');
+        console.log('🗑️ 古いメッセージ削除完了');
       } catch (err) {
-        console.warn('⚠️ メッセージ削除失敗:', err.message);
+        console.warn('⚠️ 削除失敗:', err.message);
       }
     }
 
@@ -78,8 +98,8 @@ async function sendOrUpdateEmbed() {
       components: createGroupButtons(),
     });
 
-    lastMessage = sentMessage;
     console.log('📤 新しいメッセージ送信完了');
+
   } catch (error) {
     console.error('❌ sendOrUpdateEmbed() エラー:', error.message);
   }
@@ -156,9 +176,8 @@ client.on('interactionCreate', async interaction => {
 
 client.login(TOKEN);
 
-// ✅ ExpressによるUptimeRobotのPing対応
+// ✅ ExpressでUptimeRobotのPingに応答
 const app = express();
 app.get('/', (_, res) => res.send('Bot is alive!'));
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Webサーバー起動済み on port ${PORT}`));
