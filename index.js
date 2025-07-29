@@ -1,13 +1,6 @@
 require('dotenv').config();
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const express = require('express');
-const {
-  Client,
-  GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -22,7 +15,6 @@ const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID;
 
-// グループとメンバー一覧
 const groupMembers = {
   "TWICE": ["Nayeon", "Jeongyeon", "Momo", "Sana", "Jihyo", "Mina", "Dahyun", "Chaeyoung", "Tzuyu"],
   "LE SSERAFIM": ["Kim Chaewon", "Sakura", "Huh Yunjin", "Kazuha", "Hong Eunchae"],
@@ -45,7 +37,6 @@ const groupMembers = {
   "NIZIU": ["Mako", "Rio", "Maya", "Riku", "Ayaka", "Mayuka", "Rima", "Miihi", "Nina"]
 };
 
-// ボタン生成
 function createGroupButtons() {
   const rows = [];
   let currentRow = new ActionRowBuilder();
@@ -57,10 +48,7 @@ function createGroupButtons() {
       count = 0;
     }
     currentRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`group_${group}`)
-        .setLabel(group)
-        .setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`group_${group}`).setLabel(group).setStyle(ButtonStyle.Primary)
     );
     count++;
   }
@@ -68,111 +56,120 @@ function createGroupButtons() {
   return rows;
 }
 
-// Embed送信または更新
+let lastMessageId = null;
+
 async function sendOrUpdateEmbed() {
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
     if (!channel) return console.log('❌ チャンネルが見つかりません');
 
-    // Botが直近に送ったメッセージを削除
-    const messages = await channel.messages.fetch({ limit: 10 });
-    const lastBotMsg = messages.find(msg => msg.author.id === client.user.id);
-    if (lastBotMsg) {
-      await lastBotMsg.delete();
-      console.log('🗑️ 古いEmbedを削除しました');
+    // 古いメッセージ削除（IDが記録されていれば）
+    if (lastMessageId) {
+      try {
+        const oldMessage = await channel.messages.fetch(lastMessageId);
+        if (oldMessage) await oldMessage.delete();
+        console.log('🗑️ 前のメッセージを削除しました');
+      } catch (err) {
+        console.warn('⚠️ 古いメッセージ削除時にエラー:', err.message);
+      }
     }
 
-    // 新しいEmbed送信
     const embed = new EmbedBuilder()
       .setTitle('🎵 グループを選択してください')
       .setDescription('ボタンを押すと、そのグループのメンバー選択ができます！')
       .setColor(0x00AEFF)
       .setImage('https://i.imgur.com/dpvNDs6.jpeg');
 
-    await channel.send({
+    const sent = await channel.send({
       embeds: [embed],
       components: createGroupButtons(),
     });
 
+    lastMessageId = sent.id;
     console.log('✅ 新しいEmbedを送信しました');
-  } catch (error) {
-    console.error('❌ sendOrUpdateEmbedエラー:', error);
+  } catch (e) {
+    console.error('❌ Embed送信失敗:', e);
   }
 }
 
-// Bot起動時
 client.once('ready', () => {
-  console.log(`🚀 ${client.user.tag} 起動完了`);
+  console.log(`${client.user.tag} 起動完了`);
   sendOrUpdateEmbed();
-  setInterval(sendOrUpdateEmbed, 5 * 60 * 1000);
+  setInterval(sendOrUpdateEmbed, 5 * 60 * 1000); // 5分ごとに更新
 });
 
-// インタラクション対応
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
+
   const customId = interaction.customId;
 
-  if (customId.startsWith("group_")) {
-    const groupName = customId.replace("group_", "");
-    const members = groupMembers[groupName];
-    if (!members) return;
+  try {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    const hasAccess = interaction.member.roles.cache.has(REQUIRED_ROLE_ID);
-    if (!hasAccess) {
-      await interaction.reply({
-        content: `この操作には特定のロールが必要です。`,
-        flags: 64
-      });
-      return;
-    }
+    if (customId.startsWith("group_")) {
+      const groupName = customId.replace("group_", "");
+      const members = groupMembers[groupName];
+      if (!members) return;
 
-    const memberRows = [];
-    let row = new ActionRowBuilder();
-    let count = 0;
-    for (const member of members) {
-      if (count >= 5) {
-        memberRows.push(row);
-        row = new ActionRowBuilder();
-        count = 0;
+      const hasAccess = member.roles.cache.has(REQUIRED_ROLE_ID);
+      if (!hasAccess) {
+        await interaction.reply({
+          content: `この操作には特定のロールが必要です。`,
+          ephemeral: true
+        });
+        return;
       }
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`member_${member}`)
-          .setLabel(member)
-          .setStyle(ButtonStyle.Secondary)
-      );
-      count++;
-    }
-    if (count > 0) memberRows.push(row);
 
-    await interaction.reply({
-      content: `**${groupName}** のメンバーを選んでください：`,
-      components: memberRows,
-      flags: 64
-    });
-  }
+      const memberRows = [];
+      let row = new ActionRowBuilder();
+      let count = 0;
+      for (const m of members) {
+        if (count >= 5) {
+          memberRows.push(row);
+          row = new ActionRowBuilder();
+          count = 0;
+        }
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`member_${m}`)
+            .setLabel(m)
+            .setStyle(ButtonStyle.Secondary)
+        );
+        count++;
+      }
+      if (count > 0) memberRows.push(row);
 
-  if (customId.startsWith("member_")) {
-    const memberName = customId.replace("member_", "");
-    const role = interaction.guild.roles.cache.find(r => r.name === memberName);
-    if (!role) {
-      await interaction.reply({ content: `ロール「${memberName}」が見つかりません。`, flags: 64 });
-      return;
+      await interaction.reply({
+        content: `**${groupName}** のメンバーを選んでください：`,
+        components: memberRows,
+        ephemeral: true
+      });
     }
 
-    const member = interaction.member;
-    if (member.roles.cache.has(role.id)) {
-      await interaction.reply({ content: `あなたはすでに「${memberName}」ロールを持っています。`, flags: 64 });
-    } else {
-      await member.roles.add(role);
-      await interaction.reply({ content: `ロール「${memberName}」を付与しました！`, flags: 64 });
+    if (customId.startsWith("member_")) {
+      const memberName = customId.replace("member_", "");
+      const role = interaction.guild.roles.cache.find(r => r.name === memberName);
+      if (!role) {
+        await interaction.reply({ content: `ロール「${memberName}」が見つかりません。`, ephemeral: true });
+        return;
+      }
+
+      if (member.roles.cache.has(role.id)) {
+        await interaction.reply({ content: `あなたはすでに「${memberName}」ロールを持っています。`, ephemeral: true });
+      } else {
+        await member.roles.add(role);
+        await interaction.reply({ content: `「${memberName}」ロールを付与しました！`, ephemeral: true });
+      }
     }
+  } catch (err) {
+    console.error('💥 interaction エラー:', err);
+    await interaction.reply({ content: 'エラーが発生しました。', ephemeral: true });
   }
 });
 
-// Expressサーバー（UptimeRobot用）
-const app = express();
-app.get('/', (_, res) => res.send('Bot is running!'));
-app.listen(3000, () => console.log('🌐 Expressサーバー起動完了（ポート3000）'));
-
 client.login(TOKEN);
+
+// Express (Render対策)
+const app = express();
+app.get('/', (_, res) => res.send('Bot is alive!'));
+app.listen(3000, () => console.log('🌐 Expressサーバー起動完了（ポート3000）'));
