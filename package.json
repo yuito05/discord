@@ -1,0 +1,13 @@
+{
+  "name": "kpop-bot",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.0.3",
+    "express": "^5.1.0"
+  },
+  "scripts": {
+    "start": "node index.cjs"
+  }
+}
