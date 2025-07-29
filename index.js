@@ -1,22 +1,14 @@
+console.log("🔐 TOKEN:", process.env.TOKEN);
 require('dotenv').config();
-console.log("TOKEN:", process.env.TOKEN);
-
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const express = require('express');
-const {
-  Client,
-  GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder
-} = require('discord.js');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
   ]
 });
 
@@ -25,20 +17,25 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 const REQUIRED_ROLE_ID = process.env.REQUIRED_ROLE_ID;
 
 const groupMembers = {
+  // グループ名とメンバー（省略せず記述）
   "TWICE": ["Nayeon", "Jeongyeon", "Momo", "Sana", "Jihyo", "Mina", "Dahyun", "Chaeyoung", "Tzuyu"],
+  "LE SSERAFIM": ["Kim Chaewon", "Sakura", "Huh Yunjin", "Kazuha", "Hong Eunchae"],
+  "IVE": ["An Yujin", "Gaeul", "Rei", "Jang Wonyoung", "Liz", "Leeseo"],
+  "AESPA": ["Karina", "Giselle", "Winter", "Ningning"],
+  "NEWJEANS": ["Minji", "Hanni", "Danielle", "Haerin", "Hyein"],
   "ITZY": ["Yeji", "Lia", "Ryujin", "Chaeryeong", "Yuna"],
-  "NMIXK": ["Haewon", "Lily", "Sullyoon", "Jinni", "Bae", "Jiwoo", "Kyujin"],
+  "NMIXX": ["Haewon", "Lily", "Sullyoon", "Bae", "Jiwoo", "Kyujin"],
   "ILLIT": ["Yunah", "Minju", "Moka", "Wonhee", "Iroha"],
   "KISS OF LIFE": ["Julie", "Natty", "Belle", "Haneul"],
-  "TRIPLE S": ["Yubin", "Kaede", "SeoYeon", "Hyerin"],
-  "FROMIS 9": ["Saerom", "Hayoung", "Gyuri", "Jiwon", "Jisun", "Seoyeon", "Chaeyoung", "Nagyung", "Jiheon"],
-  "LOONA": ["Heejin", "Hyunjin", "Haseul", "Yeojin", "Vivi", "Kim Lip", "Jinsoul", "Choerry", "Yves", "Chuu", "Go Won", "Olivia Hye"],
+  "TRIPLE S": ["Kim YooYeon", "Mayu", "Xinyu", "Kim NaKyoung", "Park SoHyun", "Seo DaHyun", "Nien", "Yoon SeoYeon", "JiYeon", "Kotone", "Kim ChaeYeon", "Gong YuBin", "Lee JiWoo", "Kim SooMin", "Kwak YeonJi", "JooBin", "Jeong HaYeon", "Kim ChaeWon"],
+  "FROMIS 9": ["Song Ha‑young", "Park Ji‑won", "Lee Chae‑young", "Lee Na‑gyung", "Baek Ji‑heon"],
+  "LOONA": ["HeeJin", "HyunJin", "HaSeul", "ViVi", "Kim Lip", "JinSoul", "Chuu", "Go Won", "Choerry", "Yves", "YeoJin", "HyeJu"],
   "H1KEY": ["Seoi", "Riina", "Hwiseo", "Yel"],
   "STAYC": ["Sumin", "Sieun", "Isa", "Seeun", "Yoon", "J"],
-  "(G)I-DLE": ["Soyeon", "Minnie", "Miyeon", "Yuqi", "Shuhua"],
-  "XG": ["Jurin", "Chisa", "Cocona", "Hinata", "Juria", "Maya", "Harvey"],
+  "(G)I-DLE": ["Miyeon", "Minnie", "Soyeon", "Yuqi", "Shuhua"],
+  "XG": ["Jurin", "Chisa", "Hinata", "Harvey", "Juria", "Maya", "Cocona"],
   "BLACKPINK": ["Jisoo", "Jennie", "Rosé", "Lisa"],
-  "KEPLER": ["Yujin", "Mashiro", "Xiaoting", "Chaehyun", "Dayeon", "Hikaru", "Bahiyyih", "Youngeun", "Yeseo"],
+  "KEPLER": ["Choi Yu‑jin", "Shen Xiaoting", "Kim Chae‑hyun", "Kim Da‑yeon", "Ezaki Hikaru", "Huening Bahiyyih", "Seo Young‑eun"],
   "NIZIU": ["Mako", "Rio", "Maya", "Riku", "Ayaka", "Mayuka", "Rima", "Miihi", "Nina"]
 };
 
@@ -46,8 +43,6 @@ function createGroupButtons() {
   const rows = [];
   let currentRow = new ActionRowBuilder();
   let count = 0;
-  let total = 0;
-
   for (const group of Object.keys(groupMembers)) {
     if (count >= 5) {
       rows.push(currentRow);
@@ -55,58 +50,50 @@ function createGroupButtons() {
       count = 0;
     }
     currentRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`group_${group}`)
-        .setLabel(group)
-        .setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`group_${group}`).setLabel(group).setStyle(ButtonStyle.Primary)
     );
     count++;
-    total++;
   }
-
   if (count > 0) rows.push(currentRow);
-  console.log(`🧩 ボタン数: ${total}, 行数: ${rows.length}`);
-  return rows;
+  return rows.slice(0, 5); // Discordは最大5行まで
 }
+
+let lastMessage = null;
 
 async function sendOrUpdateEmbed() {
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
-    if (!channel) return console.error('❌ チャンネルが見つかりません');
-
-    const messages = await channel.messages.fetch({ limit: 10 });
-    const botMessages = messages.filter(msg => msg.author.id === client.user.id);
-    const lastMessage = botMessages.first();
+    if (!channel) return console.log('❌ チャンネルが見つかりません');
 
     if (lastMessage) {
       try {
         await lastMessage.delete();
-        console.log('🗑️ 古いメッセージ削除完了');
+        console.log("🗑️ 旧メッセージ削除完了");
       } catch (err) {
-        console.warn('⚠️ 削除失敗:', err.message);
+        console.error("❗ メッセージ削除失敗:", err.message);
       }
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('🎵 グループを選択してください')
-      .setDescription('ボタンを押すと、そのグループのメンバー選択ができます！')
+      .setTitle("🎵 グループを選択してください")
+      .setDescription("ボタンを押すと、そのグループのメンバー選択ができます！")
       .setColor(0x00AEFF)
-      .setImage('https://i.imgur.com/dpvNDs6.jpeg');
+      .setImage("https://i.imgur.com/dpvNDs6.jpeg");
 
-    const sentMessage = await channel.send({
+    const sent = await channel.send({
       embeds: [embed],
       components: createGroupButtons(),
     });
 
-    console.log('📤 新しいメッセージ送信完了');
-
-  } catch (error) {
-    console.error('❌ sendOrUpdateEmbed() エラー:', error.message);
+    lastMessage = sent;
+    console.log("📤 Embed再送信完了");
+  } catch (err) {
+    console.error("❗ Embed送信失敗:", err.message);
   }
 }
 
 client.once('ready', () => {
-  console.log(`${client.user.tag} ログイン完了`);
+  console.log(`✅ ログイン完了: ${client.user.tag}`);
   sendOrUpdateEmbed();
   setInterval(sendOrUpdateEmbed, 5 * 60 * 1000);
 });
@@ -114,70 +101,65 @@ client.once('ready', () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
 
-  const customId = interaction.customId;
+  const id = interaction.customId;
+  const member = interaction.member;
 
-  if (customId.startsWith("group_")) {
-    const groupName = customId.replace("group_", "");
-    const members = groupMembers[groupName];
+  if (id.startsWith("group_")) {
+    const group = id.replace("group_", "");
+    const members = groupMembers[group];
     if (!members) return;
 
-    const hasAccess = interaction.member.roles.cache.has(REQUIRED_ROLE_ID);
+    const hasAccess = member.roles.cache.has(REQUIRED_ROLE_ID);
     if (!hasAccess) {
-      await interaction.reply({
-        content: `You need the required role to select members.`,
+      return await interaction.reply({
+        content: `❌ 必要なロールがありません。`,
         flags: 64
       });
-      return;
     }
 
-    const memberRows = [];
+    const rows = [];
     let row = new ActionRowBuilder();
     let count = 0;
-    for (const member of members) {
+
+    for (const name of members) {
       if (count >= 5) {
-        memberRows.push(row);
+        rows.push(row);
         row = new ActionRowBuilder();
         count = 0;
       }
       row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`member_${member}`)
-          .setLabel(member)
-          .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`member_${name}`).setLabel(name).setStyle(ButtonStyle.Secondary)
       );
       count++;
     }
-    if (count > 0) memberRows.push(row);
+    if (count > 0) rows.push(row);
 
-    await interaction.reply({
-      content: `Select a member from **${groupName}**:`,
-      components: memberRows,
+    return await interaction.reply({
+      content: `👤 **${group}** のメンバーを選んでください：`,
+      components: rows.slice(0, 5),
       flags: 64
     });
   }
 
-  if (customId.startsWith("member_")) {
-    const memberName = customId.replace("member_", "");
-    const role = interaction.guild.roles.cache.find(r => r.name === memberName);
+  if (id.startsWith("member_")) {
+    const name = id.replace("member_", "");
+    const role = interaction.guild.roles.cache.find(r => r.name === name);
     if (!role) {
-      await interaction.reply({ content: `Role "${memberName}" not found.`, flags: 64 });
-      return;
+      return await interaction.reply({ content: `❌ ロール "${name}" が見つかりません`, flags: 64 });
     }
 
-    const member = interaction.member;
     if (member.roles.cache.has(role.id)) {
-      await interaction.reply({ content: `You already have the "${memberName}" role.`, flags: 64 });
-    } else {
-      await member.roles.add(role);
-      await interaction.reply({ content: `Role "${memberName}" has been added to you!`, flags: 64 });
+      return await interaction.reply({ content: `⚠️ すでに "${name}" のロールを持っています`, flags: 64 });
     }
+
+    await member.roles.add(role);
+    return await interaction.reply({ content: `✅ ロール "${name}" を付与しました！`, flags: 64 });
   }
 });
 
 client.login(TOKEN);
 
-// ✅ ExpressでUptimeRobotのPingに応答
+// --- Express for Ping ---
 const app = express();
-app.get('/', (_, res) => res.send('Bot is alive!'));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Webサーバー起動済み on port ${PORT}`));
+app.get('/', (_, res) => res.send('✅ Bot is alive'));
+app.listen(3000, () => console.log("🌐 Webサーバー起動完了（スリープ回避用）"));
